@@ -1,0 +1,218 @@
+public\test-api.html -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>API Test Page</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      h1 {
+        color: #333;
+      }
+      .panel {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+      textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        min-height: 80px;
+      }
+      button {
+        background-color: #4a5568;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      button:hover {
+        background-color: #2d3748;
+      }
+      pre {
+        background-color: #f1f1f1;
+        padding: 15px;
+        border-radius: 4px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+      .loading {
+        opacity: 0.7;
+      }
+      .error {
+        color: #e53e3e;
+      }
+      .response {
+        margin-top: 20px;
+      }
+      .controls {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .toggle-switch {
+        display: flex;
+        align-items: center;
+      }
+      .toggle-switch input {
+        margin-right: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>API Test Panel</h1>
+
+    <div class="panel" id="chatPanel">
+      <h2>Chat API Test</h2>
+      <textarea id="chatMessage" placeholder="Enter your message here...">
+Tell me about Islamic prayer customs</textarea
+      >
+
+      <div class="controls">
+        <button id="sendChatBtn">Send Message</button>
+        <div class="toggle-switch">
+          <input type="checkbox" id="useRAG" checked />
+          <label for="useRAG">Use RAG</label>
+        </div>
+      </div>
+
+      <div class="response" id="chatResponse">
+        <p>Response will appear here...</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Embed API Test</h2>
+      <textarea id="embedText" placeholder="Enter text to embed...">
+Islamic prayer customs</textarea
+      >
+      <div class="controls">
+        <button id="getEmbedBtn">Get Embedding</button>
+      </div>
+      <div class="response" id="embedResponse">
+        <p>Response will appear here...</p>
+      </div>
+    </div>
+
+    <script>
+      // Chat API request
+      document
+        .getElementById("sendChatBtn")
+        .addEventListener("click", async () => {
+          const panel = document.getElementById("chatPanel");
+          const responseArea = document.getElementById("chatResponse");
+          const message = document.getElementById("chatMessage").value;
+          const useRAG = document.getElementById("useRAG").checked;
+
+          if (!message.trim()) {
+            responseArea.innerHTML =
+              '<p class="error">Please enter a message</p>';
+            return;
+          }
+
+          try {
+            panel.classList.add("loading");
+            responseArea.innerHTML = "<p>Loading response...</p>";
+
+            console.log("Sending chat request:", { message, useRAG });
+            const response = await fetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ message, useRAG }),
+            });
+
+            const data = await response.json();
+            console.log("Chat response:", data);
+
+            let html = "";
+            if (response.ok) {
+              html = `
+            <h3>AI Response:</h3>
+            <pre>${data.message}</pre>
+          `;
+              if (data.references) {
+                html += `
+              <h3>References:</h3>
+              <pre>${data.references}</pre>
+            `;
+              }
+            } else {
+              html = `<p class="error">Error: ${
+                data.error || "Unknown error"
+              }</p>`;
+              if (data.details) {
+                html += `<pre>${data.details}</pre>`;
+              }
+            }
+
+            responseArea.innerHTML = html;
+          } catch (error) {
+            console.error("Error:", error);
+            responseArea.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+          } finally {
+            panel.classList.remove("loading");
+          }
+        });
+
+      // Embed API request
+      document
+        .getElementById("getEmbedBtn")
+        .addEventListener("click", async () => {
+          const responseArea = document.getElementById("embedResponse");
+          const text = document.getElementById("embedText").value;
+
+          if (!text.trim()) {
+            responseArea.innerHTML =
+              '<p class="error">Please enter text to embed</p>';
+            return;
+          }
+
+          try {
+            responseArea.innerHTML = "<p>Getting embedding...</p>";
+
+            const response = await fetch("/api/embed", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+              let embeddingText = "Embedding vector: ";
+              if (data.embedding) {
+                embeddingText += `[${data.embedding
+                  .slice(0, 5)
+                  .join(", ")}...] (${data.embedding.length} dimensions)`;
+              } else {
+                embeddingText += "Not available";
+              }
+
+              responseArea.innerHTML = `<p>Successfully generated embedding</p><pre>${embeddingText}</pre>`;
+            } else {
+              responseArea.innerHTML = `<p class="error">Error: ${
+                data.error || "Unknown error"
+              }</p>`;
+            }
+          } catch (error) {
+            console.error("Error:", error);
+            responseArea.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+          }
+        });
+    </script>
+  </body>
+</html>
