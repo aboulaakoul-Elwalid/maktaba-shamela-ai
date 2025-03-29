@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { API_CONFIG } from "@/config/api";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,36 +9,27 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "Text is required" }, { status: 400 });
     }
 
-    const mistralApiKey = process.env.MISTRAL_API_KEY;
-    if (!mistralApiKey) {
-      console.error("MISTRAL_API_KEY not found in environment variables");
-      return Response.json({ error: "Configuration error" }, { status: 500 });
-    }
-
-    // Call Mistral API to get embeddings
-    const response = await fetch("https://api.mistral.ai/v1/embeddings", {
+    // Call your FastAPI embed endpoint instead of Mistral directly
+    const response = await fetch(`${API_CONFIG.BACKEND_URL}/embed`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${mistralApiKey}`,
+        "X-API-Key": API_CONFIG.API_KEY,
       },
-      body: JSON.stringify({
-        model: "mistral-embed",
-        input: text,
-      }),
+      body: JSON.stringify({ text }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Mistral API error: ${response.status} ${errorText}`);
+      console.error(`Backend API error: ${response.status} ${errorText}`);
       return Response.json(
         { error: "Failed to generate embeddings" },
-        { status: 500 }
+        { status: response.status }
       );
     }
 
     const data = await response.json();
-    return Response.json({ embedding: data.data[0].embedding });
+    return Response.json({ embedding: data.embedding });
   } catch (error) {
     console.error("Error generating embedding:", error);
     return Response.json(

@@ -1,19 +1,14 @@
 import { NextRequest } from "next/server";
+import { API_CONFIG } from "@/config/api";
 
-interface PineconeMatch {
-  id: string;
+interface RetrievalMatch {
   score: number;
+  id: string;
   metadata: {
     book_name: string;
     section_title: string;
     text: string;
-    [key: string]: any;
   };
-}
-
-interface PineconeResponse {
-  matches: PineconeMatch[];
-  namespace: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -27,64 +22,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get environment variables
-    const pineconeApiKey = process.env.PINECONE_API_KEY;
-    const pineconeIndexName = process.env.PINECONE_INDEX_NAME;
-    const pineconeEnvironment = process.env.PINECONE_ENVIRONMENT;
-
-    if (!pineconeApiKey || !pineconeIndexName || !pineconeEnvironment) {
-      console.error("Required Pinecone environment variables are missing");
-      return Response.json({ error: "Configuration error" }, { status: 500 });
-    }
-
-    // First, get embedding for the query using our embed endpoint
-    const embedResponse = await fetch(new URL("/api/embed", req.url), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: query }),
-    });
-
-    if (!embedResponse.ok) {
-      return Response.json(
-        { error: "Failed to generate query embedding" },
-        { status: 500 }
-      );
-    }
-
-    const { embedding } = await embedResponse.json();
-
-    // Query Pinecone with the embedding
-    const pineconeUrl = `https://api.pinecone.io/v1/indexes/${pineconeIndexName}/query`;
-
-    const pineconeResponse = await fetch(pineconeUrl, {
+    // Call your FastAPI retrieval endpoint
+    const response = await fetch(`${API_CONFIG.BACKEND_URL}/retrieval`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Api-Key": pineconeApiKey,
+        "X-API-Key": API_CONFIG.API_KEY,
       },
-      body: JSON.stringify({
-        vector: embedding,
-        topK,
-        includeMetadata: true,
-        namespace: "",
-      }),
+      body: JSON.stringify({ query, top_k: topK }),
     });
 
-    if (!pineconeResponse.ok) {
-      const errorText = await pineconeResponse.text();
-      console.error(
-        `Pinecone API error: ${pineconeResponse.status} ${errorText}`
-      );
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Backend API error: ${response.status} ${errorText}`);
       return Response.json(
         { error: "Failed to query vector database" },
-        { status: 500 }
+        { status: response.status }
       );
     }
 
-    const data: PineconeResponse = await pineconeResponse.json();
+    const data = await response.json();
 
     return Response.json({
-      matches: data.matches.map((match) => ({
+      matches: data.matches.map((match: any) => ({
         score: match.score,
         id: match.id,
         metadata: {
