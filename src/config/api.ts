@@ -1,9 +1,6 @@
 export const API_CONFIG = {
   // Remove trailing slash to be safe
-  BACKEND_URL: (
-    process.env.NEXT_PUBLIC_API_URL ||
-    "https://server-maktaba-shamela.onrender.com"
-  ).replace(/\/$/, ""),
+  BACKEND_URL: "https://server-maktaba-shamela.onrender.com".replace(/\/$/, ""),
   // Set a 15 second timeout for API requests
   TIMEOUT: 15000,
   // Enable logging
