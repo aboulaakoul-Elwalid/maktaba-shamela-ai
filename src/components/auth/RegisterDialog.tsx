@@ -10,12 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
-import { AlertCircle, Loader2, CheckCircle } from "lucide-react"; // Icons
-import { Alert, AlertDescription } from "@/components/ui/alert"; // For errors
+import { useAuth } from "@/hooks/use-auth"; // Corrected import path
+import { AlertCircle, Loader2, CheckCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function RegisterDialog() {
   const [name, setName] = useState("");
@@ -23,109 +24,98 @@ export function RegisterDialog() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isOpen, setIsOpen] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false); // State for success message
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  // Get auth functions and state from context
-  // Note: We use 'isLoading' and 'error' from useAuth, assuming registration uses the same state
-  const { register, isLoading, error } = useAuth();
+  const { register, isLoading, error: authError } = useAuth();
 
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault();
-    setShowSuccess(false); // Reset success message
+    setLocalError(null);
+    setShowSuccess(false);
 
     if (password !== confirmPassword) {
-      // Handle password mismatch locally (or rely on backend validation)
-      alert("Passwords do not match!"); // Simple alert for now
+      setLocalError("Passwords do not match!");
+      return;
+    }
+    if (password.length < 6) {
+      setLocalError("Password must be at least 6 characters long.");
       return;
     }
 
     try {
       await register(name, email, password);
-      // If register is successful (no error thrown)
-      setShowSuccess(true); // Show success message
-      setName(""); // Clear fields
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
-      // Keep the dialog open to show the success message, or close after a delay:
-      // setTimeout(() => setIsOpen(false), 3000);
-    } catch (err) {
-      // Error is already set in AuthContext by the register function
-      console.error("Registration attempt failed in component");
-      setShowSuccess(false); // Ensure success message is hidden on error
+      setShowSuccess(true);
+      setTimeout(() => {
+        setName("");
+        setEmail("");
+        setPassword("");
+        setConfirmPassword("");
+        setIsOpen(false);
+        setShowSuccess(false);
+      }, 2000);
+    } catch (err: any) {
+      setLocalError(err.message || "Registration failed. Please try again.");
+      console.error("Register Dialog Error:", err);
     }
   };
 
-  // Reset state when dialog is closed/opened
+  const displayError = localError || authError;
+
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open) {
-      // Reset fields and messages when closing
-      setName("");
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
+      setLocalError(null);
       setShowSuccess(false);
-      // Consider clearing the global error state in AuthContext if desired,
-      // or let it persist until the next auth action.
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        {/* Add a button or link somewhere to trigger this dialog */}
-        <Button variant="link">Register</Button>
+        <Button>Register</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Register</DialogTitle>
+          <DialogDescription>
+            Create an account to save your chat history.
+          </DialogDescription>
+        </DialogHeader>
         <form onSubmit={handleRegister}>
-          <DialogHeader>
-            <DialogTitle>Register</DialogTitle>
-            <DialogDescription>
-              Create your account to save conversations.
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Display Success Message */}
+          {displayError && !showSuccess && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{displayError}</AlertDescription>
+            </Alert>
+          )}
           {showSuccess && (
             <Alert
               variant="default"
-              className="bg-green-100 border-green-300 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300 my-4"
+              className="mb-4 border-green-500 text-green-700"
             >
-              <CheckCircle className="h-4 w-4" />
+              <CheckCircle className="h-4 w-4 text-green-600" />
               <AlertDescription>
                 Registration successful! You can now log in.
               </AlertDescription>
             </Alert>
           )}
-
-          {/* Display Registration Error */}
-          {error &&
-            !showSuccess && ( // Only show error if not showing success
-              <Alert variant="destructive" className="my-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">
+              <Label htmlFor="name-register" className="text-right">
                 Name
               </Label>
               <Input
-                id="name"
-                type="text"
+                id="name-register"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                required
                 className="col-span-3"
                 disabled={isLoading || showSuccess}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="email-register" className="text-right">
-                {" "}
-                {/* Unique ID */}
                 Email
               </Label>
               <Input
@@ -133,15 +123,13 @@ export function RegisterDialog() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="col-span-3"
                 required
+                className="col-span-3"
                 disabled={isLoading || showSuccess}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="password-register" className="text-right">
-                {" "}
-                {/* Unique ID */}
                 Password
               </Label>
               <Input
@@ -149,50 +137,42 @@ export function RegisterDialog() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="col-span-3"
                 required
+                className="col-span-3"
                 disabled={isLoading || showSuccess}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="confirm-password" className="text-right">
+              <Label htmlFor="confirm-password-register" className="text-right">
                 Confirm
               </Label>
               <Input
-                id="confirm-password"
+                id="confirm-password-register"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="col-span-3"
                 required
+                className="col-span-3"
                 disabled={isLoading || showSuccess}
               />
             </div>
           </div>
           <DialogFooter>
-            {/* Hide button if registration was successful */}
-            {!showSuccess && (
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Registering...
-                  </>
-                ) : (
-                  "Register"
-                )}
-              </Button>
-            )}
-            {/* Optionally add a close button or login redirect button after success */}
-            {showSuccess && (
+            <DialogClose asChild>
               <Button
                 type="button"
-                variant="outline"
-                onClick={() => setIsOpen(false)}
+                variant="ghost"
+                disabled={isLoading || showSuccess}
               >
-                Close
+                Cancel
               </Button>
-            )}
+            </DialogClose>
+            <Button type="submit" disabled={isLoading || showSuccess}>
+              {isLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Register
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

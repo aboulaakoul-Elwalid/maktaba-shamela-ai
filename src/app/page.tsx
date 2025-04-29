@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { ChatInterface } from "@/components/chat/chat-interface";
 import { ConversationSidebar } from "@/components/chat/sidebar/ConversationSidebar";
-import { useAuth } from "@/contexts/AuthContext"; // To check auth status
+import { useAuth } from "@/hooks/use-auth"; // To check auth status
 
 export default function ChatPage() {
   const {

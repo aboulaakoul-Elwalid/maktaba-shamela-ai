@@ -51,6 +51,7 @@ export interface Message {
   timestamp: Date; // Converted from backend string
   conversationId: string;
   sources?: Source[];
+  isLoading?: boolean;
 }
 
 /**

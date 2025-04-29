@@ -3,7 +3,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/use-auth"; // Custom hook to manage authentication state
 import type { Conversation } from "@/types/types";
 import { PlusCircle, MessageSquare, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils"; // For conditional classes

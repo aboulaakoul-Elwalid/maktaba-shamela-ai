@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { useAuth } from "@/hooks/use-auth"; // Corrected import path
 import { AlertCircle, Loader2 } from "lucide-react"; // Icons
 import { Alert, AlertDescription } from "@/components/ui/alert"; // For errors
 
