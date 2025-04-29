@@ -1,23 +1,36 @@
-import type React from "react";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "../components/chat/theme-provider"; // Ensure correct path
+import { AuthProvider } from "../contexts/AuthContext"; // Import AuthProvider
 
-export const metadata = {
-  title: "Ziryab Guide - Islamic Studies & Arabic Science",
-  description:
-    "Your AI companion for exploring Islamic literature and Arabic scientific heritage",
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Ziryab Chat",
+  description: "Islamic Studies Assistant",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html lang="en">
-      <body className="bg-gray-50 overflow-hidden">{children}</body>
-      <footer className="bg-gray-800 text-white py-4 text-center">
-        &copy; {new Date().getFullYear()} Ziryab. All rights reserved.
-      </footer>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        {/* Wrap ThemeProvider and children with AuthProvider */}
+        <AuthProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
+        </AuthProvider>
+      </body>
     </html>
   );
 }

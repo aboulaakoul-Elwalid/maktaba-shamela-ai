@@ -1,109 +1,33 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
-
 import { ScrollArea } from "../ui/scroll-area";
-import { MessageBubble } from "./message-bubble";
-import { MessageInput } from "./message-input";
-import { TypingIndicator } from "./typing-indicator";
+import { MessageBubble } from "./messages/MessageBubble";
+import { MessageInput } from "./input/message-input";
+import { TypingIndicator } from "./messages/TypingIndicator";
 import GeometricPattern from "../shared/geometric-pattern";
 import { motion } from "framer-motion";
-
-// Message type definition
-interface Message {
-  id: string;
-  content: string;
-  isUser: boolean;
-  references?: string[];
-  timestamp?: Date;
-}
+import { useChat } from "@/hooks/use-chat";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Terminal } from "lucide-react";
 
 export function ChatInterface() {
-  // Sample initial welcome message
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      content:
-        "Welcome to Ziryab. How can I help you with Islamic studies today?",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+  const { messages, isLoading, error, sendMessage } = useChat();
 
-  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
-  // Handle sending a new message
-  const handleSendMessage = async (content: string, useRAG: boolean) => {
-    if (!content.trim() || isLoading) return;
-
-    // Add user message
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      content,
-      isUser: true,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      // Make API call to get response
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: content, useRAG }),
-      });
-
-      const data = await response.json();
-
-      // Add AI response with references if available
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          content: data.response,
-          isUser: false,
-          references: data.references ? [data.references] : undefined,
-          timestamp: new Date(),
-        },
-      ]);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      // Add error message
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `error-${Date.now()}`,
-          content:
-            "Sorry, there was an error processing your request. Please try again.",
-          isUser: false,
-          timestamp: new Date(),
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Scroll to bottom when messages change
   useEffect(() => {
     if (isAtBottom && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isLoading, isAtBottom]);
 
-  // Monitor scroll position
   const handleScroll = () => {
     if (!scrollAreaRef.current) return;
-
     const { scrollTop, scrollHeight, clientHeight } = scrollAreaRef.current;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-
-    // Consider "at bottom" if within 100px of the bottom
     setIsAtBottom(distanceFromBottom < 100);
   };
 
@@ -114,7 +38,6 @@ export function ChatInterface() {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
-      {/* Header */}
       <header className="border-b border-border py-3 px-4 flex items-center justify-between bg-background/80 backdrop-blur-sm z-10 sticky top-0">
         <div className="flex items-center">
           <div className="h-8 w-8 rounded-md overflow-hidden mr-3">
@@ -127,7 +50,6 @@ export function ChatInterface() {
         </div>
       </header>
 
-      {/* Messages Container */}
       <div
         className="flex-1 overflow-hidden relative"
         style={{
@@ -142,16 +64,25 @@ export function ChatInterface() {
           ref={scrollAreaRef}
         >
           <div className="max-w-4xl mx-auto">
-            {messages.map((message, index) => (
-              <MessageBubble
-                key={message.id}
-                content={message.content}
-                isUser={message.isUser}
-                references={message.references}
-                timestamp={message.timestamp}
-                isLast={index === messages.length - 1}
-              />
-            ))}
+            {messages.map((message, index) => {
+              // Filter out null/undefined titles after mapping
+              const validReferences = message.sources
+                ?.map((s) => s.title)
+                .filter((title): title is string => typeof title === "string"); // Add this filter
+
+              return (
+                <MessageBubble
+                  key={message.id}
+                  content={message.content}
+                  isUser={message.role === "user"}
+                  references={validReferences} // Pass the filtered array
+                  timestamp={
+                    message.timestamp ? new Date(message.timestamp) : undefined
+                  }
+                  isLast={index === messages.length - 1}
+                />
+              );
+            })}
 
             {isLoading && <TypingIndicator />}
 
@@ -159,7 +90,6 @@ export function ChatInterface() {
           </div>
         </ScrollArea>
 
-        {/* "New messages" indicator when not at bottom */}
         {!isAtBottom && messages.length > 2 && (
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
             <button
@@ -187,10 +117,18 @@ export function ChatInterface() {
             </button>
           </div>
         )}
+        {error && (
+          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 w-full max-w-md px-4">
+            <Alert variant="destructive">
+              <Terminal className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </div>
+        )}
       </div>
 
-      {/* Message Input */}
-      <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      <MessageInput onSendMessage={sendMessage} isLoading={isLoading} />
     </motion.div>
   );
 }

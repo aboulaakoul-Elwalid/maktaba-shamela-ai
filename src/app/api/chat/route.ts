@@ -1,71 +1,98 @@
-import { NextRequest } from "next/server";
-import { API_CONFIG } from "@/config/api";
-
-// Enhanced logging function
-function logDebug(label: string, data: any) {
-  console.log(`\n==========================================`);
-  console.log(`DEBUG [${label}]`);
-  console.log(JSON.stringify(data, null, 2));
-  console.log(`==========================================\n`);
-}
+import { NextRequest, NextResponse } from "next/server";
+import { API_CONFIG } from "@/config/api"; // Assuming API_CONFIG is correctly set up
 
 export async function POST(req: NextRequest) {
   try {
-    console.log("\n🚀 Chat API called");
-    const { message, useRAG = true } = await req.json();
-    logDebug("Request", { message, useRAG });
+    const body = await req.json();
+    const { message, useRAG, conversationId } = body;
 
     if (!message) {
-      console.log("❌ Error: Message required");
-      return Response.json({ error: "Message is required" }, { status: 400 });
-    }
-
-    // If you've implemented a RAG/chat endpoint in your FastAPI backend:
-    const response = await fetch(`${API_CONFIG.BACKEND_URL}/rag/query`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": API_CONFIG.API_KEY,
-      },
-      body: JSON.stringify({
-        query: message,
-        top_k: 5,
-        reranking: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Backend API error: ${response.status} ${errorText}`);
-      return Response.json(
-        { error: "Failed to generate response", details: errorText },
-        { status: response.status }
+      return NextResponse.json(
+        { detail: "Message content is required" },
+        { status: 400 }
       );
     }
 
-    const data = await response.json();
+    // --- Check for authentication token ---
+    const authHeader = req.headers.get("Authorization");
+    const token = authHeader?.split(" ")[1]; // Extract token after "Bearer "
+    const isAnonymous = !token;
 
-    return Response.json({
-      message: data.response,
-      references: data.context
-        ? data.context
-            .map(
-              (ctx: any) =>
-                `Book: ${ctx.book_name || "Unknown"}\nSection: ${
-                  ctx.section_title || "Unknown"
-                }\nContent: ${ctx.text_snippet || "No content"}...`
-            )
-            .join("\n\n---\n\n")
-        : null,
+    console.log("DEBUG [Proxy Request]");
+    console.log({
+      message: message,
+      useRAG: useRAG,
+      conversationId: conversationId, // The ID from the frontend (can be null)
+      tokenProvided: !!token,
+      isAnonymous: isAnonymous,
     });
+    // ------------------------------------
+
+    // Construct the backend URL
+    const backendUrl = `${API_CONFIG.BACKEND_URL}/chat/messages`; // Target the non-streaming endpoint for the proxy
+
+    // Prepare headers for the backend request
+    const backendHeaders: HeadersInit = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+
+    // Prepare body for the backend request
+    const backendBody: {
+      content: string;
+      use_rag: boolean;
+      conversation_id?: string | null; // Backend expects snake_case
+      token?: string; // Send token only if authenticated
+    } = {
+      content: message,
+      use_rag: useRAG ?? true, // Default to true if not provided
+    };
+
+    if (isAnonymous) {
+      // For anonymous users, DO NOT send conversationId (unless maybe starting one?)
+      // Let the backend handle creating a new conversation if conversationId is omitted/null
+      // Do not send token
+      console.log("Proxying as ANONYMOUS to:", backendUrl);
+    } else {
+      // For authenticated users, include conversationId if provided by frontend
+      // and include the token in the body (or header, depending on backend expectation)
+      console.log("Proxying as AUTHENTICATED to:", backendUrl);
+      if (conversationId) {
+        backendBody.conversation_id = conversationId;
+      }
+      // Assuming backend expects token in the body for this endpoint
+      // If it expects it in header, adjust accordingly
+      backendBody.token = token;
+    }
+
+    // Make the request to the backend
+    const backendResponse = await fetch(backendUrl, {
+      method: "POST",
+      headers: backendHeaders,
+      body: JSON.stringify(backendBody),
+    });
+
+    // Forward the backend response status and body
+    const responseData = await backendResponse.json();
+
+    if (!backendResponse.ok) {
+      console.error(
+        `❌ Backend Error (${backendResponse.status}):`,
+        responseData
+      );
+      return NextResponse.json(responseData, {
+        status: backendResponse.status,
+      });
+    }
+
+    console.log(
+      `✅ Backend OK (${backendResponse.status}), Proxying response.`
+    );
+    return NextResponse.json(responseData, { status: backendResponse.status });
   } catch (error: any) {
-    console.error("❌ Unhandled error in chat API:", error);
-    logDebug("Unhandled Error", {
-      message: error.message,
-      stack: error.stack,
-    });
-    return Response.json(
-      { error: "Failed to process request", details: error.message },
+    console.error("❌ Error in /api/chat proxy route:", error);
+    return NextResponse.json(
+      { detail: error.message || "Internal Server Error in proxy" },
       { status: 500 }
     );
   }
