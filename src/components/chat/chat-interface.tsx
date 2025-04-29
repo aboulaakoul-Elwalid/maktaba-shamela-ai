@@ -10,9 +10,30 @@ import { motion } from "framer-motion";
 import { useChat } from "@/hooks/use-chat";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal } from "lucide-react";
+import { LoginDialog } from "@/contexts/LoginDialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { RegisterDialog } from "@/components/auth/RegisterDialog";
+import { Button } from "../ui/button";
+import { Loader2 } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
-export function ChatInterface() {
-  const { messages, isLoading, error, sendMessage } = useChat();
+// Define props for ChatInterface
+interface ChatInterfaceProps {
+  initialConversationId: string | null;
+}
+
+export function ChatInterface({ initialConversationId }: ChatInterfaceProps) {
+  const {
+    messages,
+    isLoading,
+    isLoadingHistory,
+    error,
+    sendMessage,
+    currentConversationId,
+    setActiveConversationId,
+  } = useChat(initialConversationId);
+
+  const { isAuthenticated, user, logout, isLoading: authIsLoading } = useAuth();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -33,7 +54,7 @@ export function ChatInterface() {
 
   return (
     <motion.div
-      className="flex flex-col h-[100dvh] bg-background"
+      className="flex flex-col h-full bg-background"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
@@ -45,10 +66,34 @@ export function ChatInterface() {
           </div>
           <h1 className="font-semibold text-lg">Ziryab</h1>
         </div>
-        <div className="text-sm text-muted-foreground">
-          Islamic Studies Assistant
+        <div className="flex items-center gap-2">
+          {authIsLoading ? (
+            <span className="text-sm text-muted-foreground">Loading...</span>
+          ) : isAuthenticated ? (
+            <>
+              <span className="text-sm text-muted-foreground hidden sm:inline">
+                {user?.email || user?.name || "User"}
+              </span>
+              <Button variant="outline" size="sm" onClick={logout}>
+                Logout
+              </Button>
+            </>
+          ) : (
+            <>
+              <LoginDialog />
+              <RegisterDialog />
+            </>
+          )}
         </div>
       </header>
+
+      {error && (
+        <Alert variant="destructive" className="m-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       <div
         className="flex-1 overflow-hidden relative"
@@ -58,6 +103,11 @@ export function ChatInterface() {
           backgroundSize: "100% 100%",
         }}
       >
+        {isLoadingHistory && (
+          <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        )}
         <ScrollArea
           className="h-full px-4 pt-6 pb-2"
           onScroll={handleScroll}
@@ -65,17 +115,16 @@ export function ChatInterface() {
         >
           <div className="max-w-4xl mx-auto">
             {messages.map((message, index) => {
-              // Filter out null/undefined titles after mapping
               const validReferences = message.sources
                 ?.map((s) => s.title)
-                .filter((title): title is string => typeof title === "string"); // Add this filter
+                .filter((title): title is string => typeof title === "string");
 
               return (
                 <MessageBubble
                   key={message.id}
                   content={message.content}
                   isUser={message.role === "user"}
-                  references={validReferences} // Pass the filtered array
+                  references={validReferences}
                   timestamp={
                     message.timestamp ? new Date(message.timestamp) : undefined
                   }
@@ -109,21 +158,12 @@ export function ChatInterface() {
               >
                 <path
                   fillRule="evenodd"
-                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 111.414 1.414l-4 4a1 1 01-1.414 0l-4-4a1 1 010-1.414z"
                   clipRule="evenodd"
                 />
               </svg>
               New messages
             </button>
-          </div>
-        )}
-        {error && (
-          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 w-full max-w-md px-4">
-            <Alert variant="destructive">
-              <Terminal className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
           </div>
         )}
       </div>

@@ -96,7 +96,9 @@ export interface ChatApiResponse {
  */
 export interface SendMessageApiRequest {
   content: string;
+  use_rag: boolean; // <-- Add this required field
   conversation_id?: string | null; // Optional: Omit for first message of a new *authenticated* chat
+  history?: HistoryMessage[] | null; // <-- Add this optional field for anonymous users
 }
 
 /**
@@ -131,6 +133,54 @@ export interface DocumentMatch {
 export interface DirectRetrievalResponse {
   matches: DocumentMatch[];
   query: string;
+}
+
+/**
+ * API response structure for fetching user conversations.
+ * Matches GET /chat/conversations response.
+ */
+export interface ListConversationsApiResponse {
+  conversations: BackendConversation[];
+}
+
+/**
+ * Structure for history messages sent from frontend to backend
+ * for anonymous user context via query parameter.
+ */
+export interface HistoryMessage {
+  role: "user" | "assistant"; // Use "assistant" for AI messages
+  content: string;
+}
+
+/**
+ * API response structure for successful login.
+ * Matches POST /auth/login response.
+ */
+export interface LoginApiResponse {
+  access_token: string;
+  token_type: string; // Usually "bearer"
+}
+
+/**
+ * API request structure for user registration.
+ * Matches POST /auth/register request body (UserCreate schema).
+ */
+export interface RegisterApiRequest {
+  email: string;
+  password: string;
+  name?: string; // Optional name field
+}
+
+/**
+ * API response structure for successful user registration.
+ * Matches POST /auth/register response (UserResponse schema).
+ */
+export interface RegisterApiResponse {
+  id: string; // Or user_id, depending on backend schema
+  email: string;
+  name?: string;
+  is_anonymous: boolean; // Should be false after registration
+  // Add other fields returned by the backend if necessary
 }
 
 // Keep old DirectRagQuery types commented out or remove if unused

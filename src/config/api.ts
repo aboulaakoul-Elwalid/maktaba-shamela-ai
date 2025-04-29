@@ -1,6 +1,9 @@
 export const API_CONFIG = {
-  // Remove trailing slash to be safe
-  BACKEND_URL: "https://server-maktaba-shamela.onrender.com".replace(/\/$/, ""),
+  // Ensure BACKEND_URL is exactly as required and remove any trailing slash
+  BACKEND_URL: "https://server-maktaba-shamela.onrender.com".replace(
+    /\/+$/,
+    ""
+  ),
   // Set a 15 second timeout for API requests
   TIMEOUT: 15000,
   // Enable logging
