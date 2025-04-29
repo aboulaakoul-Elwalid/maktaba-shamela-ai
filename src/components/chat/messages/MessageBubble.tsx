@@ -8,7 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Markdown } from "@/components/ui/markdown";
 import { SkeletonLoader } from "./SkeletonLoader";
 
@@ -37,15 +37,6 @@ export function MessageBubble({
       opacity: 1,
       y: 0,
       transition: { duration: 0.3, ease: "easeOut" },
-    },
-  };
-
-  const contentVariants = {
-    hidden: { opacity: 0, height: 0 },
-    visible: {
-      opacity: 1,
-      height: "auto",
-      transition: { duration: 0.2, delay: 0.1 },
     },
   };
 
@@ -86,29 +77,13 @@ export function MessageBubble({
               : "bg-muted text-foreground rounded-bl-none border border-border"
           )}
         >
-          <AnimatePresence initial={false} mode="wait">
-            {isLoading ? (
-              <motion.div
-                key="loader"
-                variants={contentVariants}
-                initial="hidden"
-                animate="visible"
-                exit="hidden"
-              >
-                <SkeletonLoader className="w-48" />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="content"
-                variants={contentVariants}
-                initial="hidden"
-                animate="visible"
-                exit="hidden"
-              >
-                <Markdown>{content || ""}</Markdown>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {isLoading ? (
+            <div className="min-h-[40px]">
+              <SkeletonLoader className="w-48" />
+            </div>
+          ) : (
+            <Markdown>{content || ""}</Markdown>
+          )}
         </div>
 
         {timestamp && !isLoading && (

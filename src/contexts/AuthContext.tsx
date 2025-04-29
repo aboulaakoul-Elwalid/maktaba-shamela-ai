@@ -218,6 +218,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     setIsLoadingConversations(true);
     setConversationsError(null);
+    console.log("[AuthProvider] Fetching conversations..."); // Log start
 
     try {
       const endpoint = "/chat/conversations";
@@ -232,31 +233,107 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         },
       });
 
+      // Log status and check if response is ok before parsing JSON
+      console.log(
+        `[AuthProvider] Fetch conversations status: ${response.status}`
+      );
       if (!response.ok) {
         const errorText = await response.text();
+        console.error(
+          "[AuthProvider] Fetch conversations error response:",
+          errorText
+        );
         throw new Error(
           `Failed to fetch conversations: ${response.status} ${errorText}`
         );
       }
 
-      const data: ListConversationsApiResponse = await response.json();
-      logApiResponse(endpoint, response.status, data);
+      // Try parsing JSON
+      let data: ListConversationsApiResponse | null = null;
+      try {
+        data = await response.json();
+        console.log(
+          "[AuthProvider] Raw conversations data:",
+          JSON.stringify(data, null, 2)
+        ); // Log raw data
+      } catch (jsonError: any) {
+        console.error(
+          "[AuthProvider] Failed to parse JSON response:",
+          jsonError
+        );
+        throw new Error("Received invalid data format from server.");
+      }
 
-      // Convert backend conversations to frontend format
-      const frontendConversations: Conversation[] = data.conversations.map(
-        (conv: BackendConversation): Conversation => ({
-          id: conv.$id,
-          title: conv.title || "Untitled Conversation",
-          createdAt: new Date(conv.created_at),
-          updatedAt: conv.last_updated ? new Date(conv.last_updated) : null,
-        })
-      );
+      // *** Add More Robust Safety Checks Here ***
+      const backendConversations = data?.conversations; // Access potentially undefined property
 
-      setConversations(frontendConversations);
+      // Check if it's an array BEFORE mapping
+      if (!Array.isArray(backendConversations)) {
+        console.error(
+          "[AuthProvider] 'conversations' property is missing or not an array in the response:",
+          backendConversations
+        );
+        // Set empty array or handle as error depending on expectation
+        setConversations([]);
+        // Optionally set an error message if conversations are expected
+        // setConversationsError("Received invalid conversation data format.");
+      } else {
+        console.log(
+          "[AuthProvider] Backend conversations array:",
+          JSON.stringify(backendConversations, null, 2)
+        ); // Log the array itself
+
+        // Convert backend conversations to frontend format
+        const frontendConversations: Conversation[] = backendConversations
+          .map((conv: BackendConversation): Conversation => {
+            // Add logging for individual item processing if needed
+            // console.log("[AuthProvider] Mapping conversation item:", JSON.stringify(conv));
+            if (
+              !conv ||
+              typeof conv.$id !== "string" ||
+              typeof conv.created_at !== "string"
+            ) {
+              console.warn(
+                "[AuthProvider] Skipping invalid conversation item:",
+                conv
+              );
+              // Return a placeholder or filter it out later
+              // For now, let's create a placeholder to avoid crashing map
+              return {
+                id: `invalid-${Math.random()}`,
+                title: "Invalid Conversation Data",
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              };
+            }
+            return {
+              id: conv.$id, // Ensure $id exists and is a string
+              title: conv.title || `Conversation ${conv.$id.substring(0, 6)}`,
+              createdAt: new Date(conv.created_at), // Ensure created_at exists and is valid date string
+              updatedAt: conv.last_updated
+                ? new Date(conv.last_updated)
+                : new Date(conv.created_at),
+            };
+          })
+          .filter((conv) => !conv.id.startsWith("invalid-")); // Filter out invalid items
+
+        // Sort conversations by updatedAt descending (most recent first)
+        frontendConversations.sort(
+          (a, b) =>
+            (b.updatedAt?.getTime() || 0) - (a.updatedAt?.getTime() || 0)
+        );
+
+        console.log(
+          "[AuthProvider] Setting frontend conversations:",
+          frontendConversations.length
+        );
+        setConversations(frontendConversations);
+      }
     } catch (err: any) {
       logApiError("fetchConversations", err);
       setConversationsError(err.message || "Failed to load conversations");
       console.error("Error fetching conversations:", err);
+      setConversations([]); // Clear conversations on error
     } finally {
       setIsLoadingConversations(false);
     }

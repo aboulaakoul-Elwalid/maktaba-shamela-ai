@@ -8,7 +8,7 @@ import {
 } from "@/config/api";
 import type {
   Message as FrontendMessageType,
-  Source,
+  Source, // Make sure Source type is defined correctly
   HistoryMessage,
   SendMessageApiRequest,
   ChatApiResponse, // Import the non-streaming response type
@@ -42,10 +42,6 @@ export function useChat(initialConversationId: string | null = null) {
       console.log("Aborting previous fetch request...");
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
-      // Reset loading states if needed, though finally block in sendMessage handles it
-      // setIsLoading(false);
-      // Potentially remove placeholder if cancellation happens mid-request
-      // setMessages(prev => prev.filter(msg => !msg.id.startsWith('ai-') || msg.content !== ""));
     }
   }, []);
 
@@ -61,8 +57,6 @@ export function useChat(initialConversationId: string | null = null) {
       if (!token) {
         console.warn("Attempted to load history without auth token.");
         setIsLoadingHistory(false);
-        // Maybe set an error or guide user to login?
-        // setError("Please log in to view conversation history.");
         return; // Don't proceed if not authenticated and trying to load specific conv
       }
 
@@ -95,15 +89,18 @@ export function useChat(initialConversationId: string | null = null) {
         const data: ConversationMessagesResponse = await response.json();
         logApiResponse(endpoint, response.status, data);
 
+        const backendMessages = data?.messages || []; // Default to empty array
+
         // Convert backend messages to frontend format
-        const fetchedMessages: FrontendMessageType[] = data.messages.map(
+        const fetchedMessages: FrontendMessageType[] = backendMessages.map(
           (msg: BackendMessage): FrontendMessageType => ({
             id: msg.message_id,
             role: msg.message_type === "ai" ? "assistant" : "user",
             content: msg.content,
-            timestamp: new Date(msg.timestamp), // Convert string to Date
+            timestamp: new Date(msg.timestamp),
             conversationId: msg.conversation_id,
-            sources: msg.sources || [],
+            sources: (msg.sources || []) as Source[], // Add type assertion if needed
+            isLoading: false, // History messages are never loading
           })
         );
 
@@ -121,24 +118,21 @@ export function useChat(initialConversationId: string | null = null) {
       console.log("Loading history for conversation:", currentConversationId);
       loadMessageHistory(currentConversationId);
     } else {
-      // No specific conversation selected (e.g., new chat)
       console.log("No initial conversation ID, starting fresh.");
       setMessages([]); // Ensure messages are cleared for a new chat
       setIsLoadingHistory(false); // Not loading history in this case
     }
 
-    // Cleanup: Cancel any pending fetch if component unmounts or convId changes
     return () => {
       cancelStream();
     };
-  }, [currentConversationId, cancelStream]); // Rerun when conversationId changes
+  }, [currentConversationId, cancelStream]);
 
   // --- Send Message using NON-STREAMING Fetch POST ---
   const sendMessage = useCallback(
     async (content: string, useRAG: boolean) => {
       if (!content.trim()) return;
 
-      // Cancel any previous fetch request before starting new one
       cancelStream();
 
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -146,7 +140,7 @@ export function useChat(initialConversationId: string | null = null) {
 
       const userMessageTimestamp = new Date();
       const userMessage: FrontendMessageType = {
-        id: `user-${userMessageTimestamp.getTime()}`, // Temporary ID
+        id: `user-${userMessageTimestamp.getTime()}`,
         role: "user",
         content,
         timestamp: userMessageTimestamp,
@@ -158,36 +152,32 @@ export function useChat(initialConversationId: string | null = null) {
         userMessageTimestamp.getTime() + 1
       );
       const aiPlaceholderMessage: FrontendMessageType = {
-        id: `ai-${aiPlaceholderTimestamp.getTime()}`, // Temporary ID
+        id: `ai-${aiPlaceholderTimestamp.getTime()}`,
         role: "assistant",
-        content: "", // Will be filled after response
+        content: "",
         sources: [],
         timestamp: aiPlaceholderTimestamp,
         conversationId: currentConversationId || "temp-conv-ai",
-        isLoading: true, // Add loading state to the message itself
+        isLoading: true,
       };
 
-      // Add user message and AI placeholder to state immediately
       setMessages((prevMessages) => [
         ...prevMessages,
         userMessage,
         aiPlaceholderMessage,
       ]);
-      setIsLoading(true); // Global loading state for the input/button
+      setIsLoading(true);
       setError(null);
 
-      // --- Construct Request Body ---
       const requestBody: SendMessageApiRequest = {
         content: content,
         use_rag: useRAG,
-        // Add history for anonymous OR conversation_id for authenticated
       };
 
       if (isAnonymous) {
-        // Get recent messages from state for anonymous context
         const historyToSend = messages
           .filter((msg) => msg.role === "user" || msg.role === "assistant")
-          .slice(-HISTORY_LIMIT) // Limit history size
+          .slice(-HISTORY_LIMIT)
           .map(
             (msg): HistoryMessage => ({
               role: msg.role,
@@ -199,7 +189,6 @@ export function useChat(initialConversationId: string | null = null) {
         }
         console.log("Sending anonymous request with history:", historyToSend);
       } else {
-        // For authenticated users, send conversation_id if it exists
         if (currentConversationId) {
           requestBody.conversation_id = currentConversationId;
           console.log(
@@ -208,12 +197,10 @@ export function useChat(initialConversationId: string | null = null) {
           );
         } else {
           console.log("Sending authenticated request for NEW conversation.");
-          // If no currentConversationId, backend will create a new one
         }
       }
 
-      // --- Prepare Fetch ---
-      const endpoint = "/chat/messages"; // Use the NON-STREAMING endpoint
+      const endpoint = "/chat/messages";
       const url = `${API_CONFIG.BACKEND_URL}${endpoint}`;
       logApiCall(endpoint, "POST (JSON)", requestBody);
 
@@ -222,19 +209,18 @@ export function useChat(initialConversationId: string | null = null) {
 
       const headers: HeadersInit = {
         "Content-Type": "application/json",
-        Accept: "application/json", // Expect JSON response
+        Accept: "application/json",
       };
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      // --- Execute Fetch ---
       try {
         const response = await fetch(url, {
           method: "POST",
           headers: headers,
           body: JSON.stringify(requestBody),
-          signal: signal, // Allow cancellation
+          signal: signal,
         });
 
         if (!response.ok) {
@@ -250,7 +236,6 @@ export function useChat(initialConversationId: string | null = null) {
           throw new Error(errorBody);
         }
 
-        // --- Process JSON Response ---
         const responseData: ChatApiResponse = await response.json();
         logApiResponse(endpoint, response.status, responseData);
 
@@ -258,18 +243,13 @@ export function useChat(initialConversationId: string | null = null) {
         const finalUserMessageId = responseData.user_message_id;
         const finalAiMessageId = responseData.ai_message_id;
 
-        // Update conversation ID state if it's new or confirmed
         if (newConvId && newConvId !== currentConversationId) {
           console.log("Received new/confirmed conversation ID:", newConvId);
-          // Update the state. The useEffect will trigger history reload if needed,
-          // but we also update messages directly here for immediate feedback.
           setCurrentConversationId(newConvId);
         }
 
-        // Update messages state with the final data from the response
         setMessages((prev) =>
           prev.map((msg) => {
-            // Update the user message with final ID and conversation ID
             if (msg.id === userMessage.id && finalUserMessageId) {
               return {
                 ...msg,
@@ -277,22 +257,20 @@ export function useChat(initialConversationId: string | null = null) {
                 conversationId: newConvId || msg.conversationId,
               };
             }
-            // Update the AI placeholder message with final content, sources, ID, etc.
             if (msg.id === aiPlaceholderMessage.id) {
               return {
                 ...msg,
-                id: finalAiMessageId || msg.id, // Use final ID if available
+                id: finalAiMessageId || msg.id,
                 content: responseData.ai_response || "",
                 sources: responseData.sources || [],
                 conversationId: newConvId || msg.conversationId,
-                isLoading: false, // Mark as not loading anymore
+                isLoading: false,
               };
             }
-            // If conversation ID changed, update older messages in the state as well
             if (
               newConvId &&
               newConvId !== currentConversationId &&
-              msg.conversationId === currentConversationId // Check against the ID *before* the update
+              msg.conversationId === currentConversationId
             ) {
               return { ...msg, conversationId: newConvId };
             }
@@ -300,10 +278,8 @@ export function useChat(initialConversationId: string | null = null) {
           })
         );
       } catch (err: any) {
-        // Handle fetch errors (including AbortError)
         if (err.name === "AbortError") {
           console.log("Fetch aborted.");
-          // Remove the placeholder message if request was cancelled before response
           setMessages((prev) =>
             prev.filter(
               (msg) =>
@@ -313,7 +289,6 @@ export function useChat(initialConversationId: string | null = null) {
         } else {
           logApiError(endpoint, err);
           setError(err.message || "Failed to send message.");
-          // Update placeholder to show error state instead of removing it
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === aiPlaceholderMessage.id
@@ -329,30 +304,27 @@ export function useChat(initialConversationId: string | null = null) {
           );
         }
       } finally {
-        // Ensure loading state is reset and controller is cleared
         setIsLoading(false);
         abortControllerRef.current = null;
       }
     },
-    [messages, currentConversationId, cancelStream] // Dependencies
+    [messages, currentConversationId, cancelStream]
   );
 
-  // Function to explicitly set the active conversation ID (e.g., from a sidebar)
   const setActiveConversationId = (id: string | null) => {
     if (id !== currentConversationId) {
       console.log(`Setting active conversation ID to: ${id}`);
       setCurrentConversationId(id);
-      // The useEffect hook will handle loading the history for the new ID
     }
   };
 
   return {
     messages,
-    isLoading, // For send input state
-    isLoadingHistory, // For history loading overlay
+    isLoading,
+    isLoadingHistory,
     error,
     sendMessage,
     currentConversationId,
-    setActiveConversationId, // Expose this setter
+    setActiveConversationId,
   };
 }
